@@ -10,8 +10,10 @@
 
 # COMMAND ----------
 
+# DBTITLE 1,Cell 2
 # MAGIC %sql
-# MAGIC CREATE CATALOG IF NOT EXISTS dwh_toolkit;
+# MAGIC -- dwh_toolkit catalog must be pre-created via the UI (programmatic catalog creation
+# MAGIC -- requires a MANAGED LOCATION in this workspace's Unity Catalog configuration).
 # MAGIC CREATE SCHEMA IF NOT EXISTS dwh_toolkit.foundations;
 # MAGIC USE CATALOG dwh_toolkit;
 # MAGIC USE SCHEMA foundations;
@@ -97,29 +99,38 @@
 
 # COMMAND ----------
 
-# MAGIC %python
-# MAGIC # Pull generated surrogate keys, then load facts referencing them —
-# MAGIC # mirrors how an ETL job would resolve natural keys to surrogate keys.
-# MAGIC products = spark.sql("SELECT product_key, product_code FROM dim_product").collect()
-# MAGIC stores = spark.sql("SELECT store_key, store_code FROM dim_store").collect()
-# MAGIC
-# MAGIC p_key = {r.product_code: r.product_key for r in products}
-# MAGIC s_key = {r.store_code: r.store_key for r in stores}
-# MAGIC
-# MAGIC print(p_key, s_key)
+# Pull generated surrogate keys, then load facts referencing them —
+# mirrors how an ETL job would resolve natural keys to surrogate keys.
+products = spark.sql("SELECT product_key, product_code FROM dim_product").collect()
+stores = spark.sql("SELECT store_key, store_code FROM dim_store").collect()
+
+p_key = {r.product_code: r.product_key for r in products}
+s_key = {r.store_code: r.store_key for r in stores}
+
+print(p_key, s_key)
 
 # COMMAND ----------
 
-# MAGIC %python
-# MAGIC from pyspark.sql import Row
-# MAGIC
-# MAGIC rows = [
-# MAGIC     Row(date_key=20260617, product_key=p_key['P001'], store_key=s_key['S01'], quantity_sold=12, sales_amount=215.88),
-# MAGIC     Row(date_key=20260617, product_key=p_key['P002'], store_key=s_key['S01'], quantity_sold=8,  sales_amount=39.92),
-# MAGIC     Row(date_key=20260618, product_key=p_key['P003'], store_key=s_key['S02'], quantity_sold=3,  sales_amount=44.97),
-# MAGIC     Row(date_key=20260619, product_key=p_key['P001'], store_key=s_key['S02'], quantity_sold=20, sales_amount=359.80),
-# MAGIC ]
-# MAGIC spark.createDataFrame(rows).write.mode("append").saveAsTable("fact_sales")
+# DBTITLE 1,Cell 9
+from pyspark.sql import Row
+from pyspark.sql.types import StructType, StructField, IntegerType, LongType, DecimalType
+from decimal import Decimal
+
+schema = StructType([
+    StructField("date_key",      IntegerType(), False),
+    StructField("product_key",   LongType(),    False),
+    StructField("store_key",     LongType(),    False),
+    StructField("quantity_sold", IntegerType(), True),
+    StructField("sales_amount",  DecimalType(10, 2), True),
+])
+
+rows = [
+    Row(date_key=20260617, product_key=p_key['P001'], store_key=s_key['S01'], quantity_sold=12, sales_amount=Decimal('215.88')),
+    Row(date_key=20260617, product_key=p_key['P002'], store_key=s_key['S01'], quantity_sold=8,  sales_amount=Decimal('39.92')),
+    Row(date_key=20260618, product_key=p_key['P003'], store_key=s_key['S02'], quantity_sold=3,  sales_amount=Decimal('44.97')),
+    Row(date_key=20260619, product_key=p_key['P001'], store_key=s_key['S02'], quantity_sold=20, sales_amount=Decimal('359.80')),
+]
+spark.createDataFrame(rows, schema).write.mode("append").saveAsTable("fact_sales")
 
 # COMMAND ----------
 
